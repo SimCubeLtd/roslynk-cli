@@ -40,6 +40,38 @@ public sealed class DaemonTests
 	}
 
 	[Test]
+	public async Task WhenIdleEvictionClosesTheLastSolution_ThenTheDaemonStops()
+	{
+		string root = Path.Combine(Path.GetTempPath(), "rk-" + Guid.NewGuid().ToString("N"));
+		var endpoint = new LocalEndpoint(root);
+		using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+		TimeSpan idleFor = TimeSpan.FromMilliseconds(200);
+		Task daemon = Task.Run(() => Daemon.RunAsync(endpoint, idleFor, lifetime.Token));
+		try
+		{
+			await WaitForEndpointAsync(endpoint, lifetime.Token);
+			string solution = Path.Combine(root, "Fixture.slnx");
+			await File.WriteAllTextAsync(solution, "<Solution />");
+
+			// Several idle windows pass with nothing loaded: an empty daemon is not stopped.
+			await Task.Delay(idleFor * 5, lifetime.Token);
+			await using (IpcClient client = await IpcClient.ConnectAsync(endpoint, false, lifetime.Token))
+			{
+				ResponseEnvelope opened = await client.SendAsync(RequestKind.OpenSolution, new OpenSolutionRequest(solution), lifetime.Token);
+				await Assert.That(opened.Status).IsEqualTo(ResponseStatus.Success);
+			}
+
+			await daemon.WaitAsync(TimeSpan.FromSeconds(20));
+			await Assert.That(lifetime.IsCancellationRequested).IsFalse();
+			await Assert.That(File.Exists(endpoint.SocketPath)).IsFalse();
+		}
+		finally
+		{
+			lifetime.Cancel(); await daemon.WaitAsync(TimeSpan.FromSeconds(10)); Directory.Delete(root, true);
+		}
+	}
+
+	[Test]
 	public async Task WhenProtocolIsIncompatible_ThenSemanticWorkIsRejectedButStopStillWorks()
 	{
 		string root = Path.Combine(Path.GetTempPath(), "rk-" + Guid.NewGuid().ToString("N"));

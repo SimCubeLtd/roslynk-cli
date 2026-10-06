@@ -82,7 +82,7 @@ The daemon uses MessagePack with bounded length-prefixed frames over a Unix doma
 
 CLI and server versions must match. After upgrading, `roslynk-cli server stop` also works against an incompatible daemon; the next command starts the installed version. The CLI locates the bundled server itself.
 
-Logs go to `daemon.log` in the private endpoint directory, normally a `roslynk-<user-hash>` directory under the OS temp directory. `ROSLYNK_ENDPOINT_DIRECTORY` can select an isolated short endpoint directory for tests or separate daemon instances. Unix overrides must be real private directories. `ROSLYNK_IDLE_MINUTES` defaults to 30 and disables idle solution eviction when set to zero. Active operations are protected from eviction. The daemon process itself stays alive.
+Logs go to `daemon.log` in the private endpoint directory, normally a `roslynk-<user-hash>` directory under the OS temp directory. `ROSLYNK_ENDPOINT_DIRECTORY` can select an isolated short endpoint directory for tests or separate daemon instances. Unix overrides must be real private directories. `ROSLYNK_IDLE_MINUTES` defaults to 30 and disables idle solution eviction when set to zero. Active operations are protected from eviction. When eviction closes the last loaded solution the daemon process stops too, and the next semantic command starts a new one. A daemon that never loaded a solution keeps running until `roslynk-cli server stop`.
 
 Core retains OpenTelemetry-compatible `ActivitySource`/`Meter` instrumentation, and Server emits operation spans. The bundled OTLP exporter is removed to keep HTTP/gRPC export paths out of the application. Use external .NET diagnostics tooling to observe instrumentation.
 

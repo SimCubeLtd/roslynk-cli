@@ -15,7 +15,11 @@ public static class Daemon
 {
 	private static readonly ActivitySource Activities = new("SimCube.Roslynk.Server");
 
-	public static async Task RunAsync(LocalEndpoint endpoint, CancellationToken cancellationToken = default)
+	public static Task RunAsync(LocalEndpoint endpoint, CancellationToken cancellationToken = default) =>
+		RunAsync(endpoint, ConfiguredIdleWindow(), cancellationToken);
+
+	/// <summary><paramref name="idleFor"/> is how long a solution may go unused before eviction; null disables idle maintenance.</summary>
+	internal static async Task RunAsync(LocalEndpoint endpoint, TimeSpan? idleFor, CancellationToken cancellationToken)
 	{
 		using FileStream ownership = endpoint.AcquireLock("daemon");
 		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(null);
@@ -26,7 +30,7 @@ public static class Daemon
 		using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping);
 		RoslynkApplication application = host.Services.GetRequiredService<RoslynkApplication>();
 		var dispatcher = new RequestDispatcher(application);
-		Task maintenance = MaintainAsync(application, lifetime.Token);
+		Task maintenance = MaintainAsync(application, idleFor, lifetime);
 		var clients = new ConcurrentDictionary<long, Task>();
 		long nextClient = 0;
 		var stopwatch = Stopwatch.StartNew();
@@ -70,16 +74,33 @@ public static class Daemon
 		}
 	}
 
-	private static async Task MaintainAsync(RoslynkApplication application, CancellationToken token)
+	private static TimeSpan? ConfiguredIdleWindow()
 	{
 		double minutes = double.TryParse(Environment.GetEnvironmentVariable("ROSLYNK_IDLE_MINUTES"), System.Globalization.CultureInfo.InvariantCulture, out double configured) ? configured : 30;
-		if (minutes <= 0 || !double.IsFinite(minutes)) return;
-		using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+		return minutes <= 0 || !double.IsFinite(minutes) ? null : TimeSpan.FromMinutes(minutes);
+	}
+
+	/// <summary>
+	/// Evicts idle solutions, and stops the daemon once eviction has closed the last one: with nothing loaded it
+	/// holds no warm state, and the next command starts a fresh daemon. A daemon that never loaded a solution
+	/// keeps running, as does one whose solutions were all closed some other way.
+	/// </summary>
+	private static async Task MaintainAsync(RoslynkApplication application, TimeSpan? idleFor, CancellationTokenSource lifetime)
+	{
+		if (idleFor is not TimeSpan window) return;
+		TimeSpan sweep = window < TimeSpan.FromMinutes(1) ? window : TimeSpan.FromMinutes(1);
+		using var timer = new PeriodicTimer(sweep);
 		try
 		{
-			while (await timer.WaitForNextTickAsync(token)) application.EvictIdle(TimeSpan.FromMinutes(minutes), DateTime.UtcNow);
+			while (await timer.WaitForNextTickAsync(lifetime.Token))
+			{
+				application.EvictIdle(window, DateTime.UtcNow, out bool closedLastSolution);
+				if (!closedLastSolution) continue;
+				lifetime.Cancel();
+				return;
+			}
 		}
-		catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+		catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
 	}
 
 	internal static async Task ServeAsync(Stream stream, Func<RequestEnvelope, CancellationToken, Task<ResponseEnvelope>> dispatch, CancellationTokenSource lifetime, Stopwatch stopwatch)

@@ -27,10 +27,21 @@ public sealed class RoslynkApplication
 		if (model.Status == SolutionStatus.Faulted) throw new InvalidOperationException(model.FaultMessage);
 	}
 	/// <summary>Evicts idle solutions only while the application is quiescent. Does not interrupt active reads or writes.</summary>
-	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc)
+	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc) => EvictIdle(idleFor, nowUtc, out _);
+
+	/// <summary>
+	/// As <see cref="EvictIdle(TimeSpan, DateTime)"/>. <paramref name="closedLastSolution"/> is true when this call
+	/// evicted at least one solution and left none loaded, which is the host's signal that it is no longer needed.
+	/// An application that never loaded a solution does not report it.
+	/// </summary>
+	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc, out bool closedLastSolution)
 	{
 		lock (MaintenanceGate)
-			return ActiveOperations == 0 ? Registry.EvictIdle(idleFor, nowUtc) : 0;
+		{
+			int evicted = ActiveOperations == 0 ? Registry.EvictIdle(idleFor, nowUtc) : 0;
+			closedLastSolution = evicted > 0 && Registry.LoadedInstances().Count == 0;
+			return evicted;
+		}
 	}
 	private async Task<OperationResult> ExecuteAsync(Func<Task<string>> action)
 	{
