@@ -1,0 +1,44 @@
+## .NET / Visual Studio
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+
+## Build results
+artifacts/
+*.binlog
+
+## Installer build artifacts (self-contained publish + built MSI are large and regenerated)
+src/WindowsServiceInstaller/publish/
+src/WindowsServiceInstaller/*.msi
+src/WindowsServiceInstaller/*.wixpdb
+
+## Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+_ReSharper*/
+*.DotSettings.user
+
+## Test / coverage
+TestResults/
+coverage*.json
+coverage*.xml
+*.coverage
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+nugets/
+
+## OS
+Thumbs.db
+.DS_Store

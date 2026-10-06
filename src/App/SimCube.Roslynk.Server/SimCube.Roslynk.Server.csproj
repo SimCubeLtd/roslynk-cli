@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <ItemGroup>
+  <ProjectReference Include="../../Core/SimCube.Roslynk.Core/SimCube.Roslynk.Core.csproj" />
+  <ProjectReference Include="../../Protocol/SimCube.Roslynk.Protocol/SimCube.Roslynk.Protocol.csproj" />
+  <PackageReference Include="Microsoft.Extensions.Hosting" />
+  <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+ </ItemGroup>
+ <ItemGroup><InternalsVisibleTo Include="SimCube.Roslynk.TransportTests" /></ItemGroup>
+</Project>

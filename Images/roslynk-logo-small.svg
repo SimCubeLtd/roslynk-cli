@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:vc="https://vectorctl.dev/ns/1"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     version="1.1"
+     width="101.6mm"
+     height="101.6mm"
+     viewBox="0 0 101.6 101.6">
+  <metadata>
+    <vc:document xmlns:vc="https://vectorctl.dev/ns/1" version="0.1.0" schema="1.0"/>
+  </metadata>
+  <g id="artwork" inkscape:groupmode="layer" inkscape:label="Artwork">
+    <rect id="terminal" x="20.32" y="25.4" width="60.96" height="51.816" rx="8.128" ry="8.128" fill="#101827"/>
+    <rect id="top-bar" x="29.464" y="35.56" width="8.128" height="3.048" fill="#30c9f4"/>
+    <rect id="top-bar-two" x="40.64" y="35.56" width="8.128" height="3.048" fill="#9463ef"/>
+    <polygon id="prompt" points="30.48,45.72 40.2336,53.848 30.48,61.976 33.4061,64.9021 45.7606,53.848 33.4061,42.7939" fill="#30c9f4"/>
+    <rect id="cursor" x="52.832" y="60.96" width="14.224" height="4.064" fill="#9463ef"/>
+  </g>
+</svg>

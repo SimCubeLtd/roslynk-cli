@@ -1,0 +1,102 @@
+using System.IO;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
+using SimCube.Roslynk.Core.Infrastructure.Lifecycle;
+using SimCube.Roslynk.Core.Infrastructure.Writing;
+
+namespace SimCube.Roslynk.CoreTests.Infrastructure.Writing;
+
+public class ApplyPipelineTests
+{
+	[Test]
+	public async Task WhenARazorFileOnDiskDiffersFromTheLoadedText_ThenTheWriteIsRefusedAsStale()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		Solution solution = instance.CurrentSolution;
+
+		DocumentId additionalId = solution.GetDocumentIdsWithFilePath(counterPath)
+			.First(id => solution.GetAdditionalDocument(id) is not null);
+		SourceText loaded = await solution.GetAdditionalDocument(additionalId)!.GetTextAsync();
+		Solution updated = solution.WithAdditionalDocumentText(
+			additionalId, SourceText.From(loaded.ToString().Replace("CurrentCount", "Total")));
+
+		// An external edit lands on disk after the solution was loaded; the stale guard must refuse the write.
+		string externallyEdited = loaded.ToString() + "\n@* external edit *@\n";
+		await File.WriteAllTextAsync(counterPath, externallyEdited);
+
+		await Assert.That(async () => { await new ApplyPipeline().ApplyAsync(instance, updated); }).ThrowsExactly<StaleWriteException>();
+		await Assert.That(await File.ReadAllTextAsync(counterPath)).IsEqualTo(externallyEdited);
+	}
+
+	[Test]
+	public async Task WhenAnAdditionalDocumentChanges_ThenItsPathIsListedForCheckOnly()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		Solution solution = instance.CurrentSolution;
+
+		DocumentId additionalId = solution.GetDocumentIdsWithFilePath(counterPath)
+			.First(id => solution.GetAdditionalDocument(id) is not null);
+		SourceText loaded = await solution.GetAdditionalDocument(additionalId)!.GetTextAsync();
+		Solution updated = solution.WithAdditionalDocumentText(
+			additionalId, SourceText.From(loaded.ToString().Replace("CurrentCount", "Total")));
+
+		IReadOnlyList<string> changed = ApplyPipeline.GetChangedFilePaths(solution, updated);
+
+		await Assert.That(changed).Contains(counterPath);
+	}
+	[Test]
+	public async Task WhenAChangedDocumentWasEditedAfterTheBaseSnapshot_ThenTheWriteIsRefusedAsStale()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string greeterPath = Directory.EnumerateFiles(Path.GetDirectoryName(solutionPath)!, "Greeter.cs", SearchOption.AllDirectories).First();
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		Solution basedOn = instance.CurrentSolution;
+		DocumentId greeterId = basedOn.GetDocumentIdsWithFilePath(greeterPath).First();
+		string loaded = (await basedOn.GetDocument(greeterId)!.GetTextAsync()).ToString();
+		Solution updated = basedOn.WithDocumentText(greeterId, SourceText.From(loaded + "// computed edit\n"));
+
+		// Another write edits the same file (disk and model agree) after the update was computed.
+		string intervening = loaded + "// intervening edit\n";
+		await new ApplyPipeline().ApplyAsync(instance, basedOn.WithDocumentText(greeterId, SourceText.From(intervening)));
+
+		await Assert.That(async () => { await new ApplyPipeline().ApplyAsync(instance, updated, basedOn); }).ThrowsExactly<StaleWriteException>();
+		await Assert.That(await File.ReadAllTextAsync(greeterPath)).IsEqualTo(intervening);
+	}
+
+	[Test]
+	public async Task WhenOnlyAnUnrelatedDocumentChangedAfterTheBaseSnapshot_ThenTheWriteSucceeds()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string directory = Path.GetDirectoryName(solutionPath)!;
+		string greeterPath = Directory.EnumerateFiles(directory, "Greeter.cs", SearchOption.AllDirectories).First();
+		string widgetPath = Directory.EnumerateFiles(directory, "Widget.cs", SearchOption.AllDirectories).First();
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		Solution basedOn = instance.CurrentSolution;
+		DocumentId greeterId = basedOn.GetDocumentIdsWithFilePath(greeterPath).First();
+		DocumentId widgetId = basedOn.GetDocumentIdsWithFilePath(widgetPath).First();
+		string greeter = (await basedOn.GetDocument(greeterId)!.GetTextAsync()).ToString();
+		string widget = (await basedOn.GetDocument(widgetId)!.GetTextAsync()).ToString();
+		Solution updated = basedOn.WithDocumentText(greeterId, SourceText.From(greeter + "// computed edit\n"));
+
+		await new ApplyPipeline().ApplyAsync(instance, basedOn.WithDocumentText(widgetId, SourceText.From(widget + "// unrelated\n")));
+		await new ApplyPipeline().ApplyAsync(instance, updated, basedOn);
+
+		await Assert.That(await File.ReadAllTextAsync(greeterPath)).IsEqualTo(greeter + "// computed edit\n");
+
+		// The intervening edit to the other file is neither reverted on disk nor in the published model.
+		await Assert.That(await File.ReadAllTextAsync(widgetPath)).IsEqualTo(widget + "// unrelated\n");
+		await Assert.That((await instance.CurrentSolution.GetDocument(widgetId)!.GetTextAsync()).ToString()).IsEqualTo(widget + "// unrelated\n");
+	}
+}

@@ -1,0 +1,71 @@
+name: Publish to NuGet
+
+# Publishing a release (including a prerelease) publishes the tool at its tag version.
+# Draft releases and tag pushes do not run this workflow. Use tags such as 2.1.0 or 2.1.0-beta.1.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-release-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.event.release.draft == false }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        run: dotnet test --solution SimCube.Roslynk.slnx --configuration Release
+
+      - name: Prepare package directory
+        run: |
+          package_dir=$(mktemp -d "$RUNNER_TEMP/roslynk-pack.XXXXXX")
+          echo "PACKAGE_DIR=$package_dir" >> "$GITHUB_ENV"
+
+      - name: Pack global tool
+        run: >
+          dotnet pack src/App/SimCube.Roslynk.Cli/SimCube.Roslynk.Cli.csproj
+          --configuration Release
+          "-p:Version=$VERSION"
+          --output "$PACKAGE_DIR"
+
+      - name: NuGet login (trusted publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: SimCube
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_TOKEN: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "$PACKAGE_DIR"/*.nupkg
+          --api-key "$NUGET_TOKEN"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Attach packages to published release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: ${{ env.PACKAGE_DIR }}/*.nupkg
+          fail_on_unmatched_files: true

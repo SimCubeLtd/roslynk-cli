@@ -1,0 +1,22 @@
+namespace SimCube.Roslynk.Core.Infrastructure.Writing;
+
+/// <summary>
+/// Thrown when a file changed on disk since Roslynk loaded it, so an apply computed against the old
+/// content is refused rather than clobbering the newer file.
+/// </summary>
+internal sealed class StaleWriteException : Exception
+{
+	public string FilePath { get; }
+
+	public StaleWriteException(string filePath)
+		: base($"'{filePath}' changed on disk since it was loaded; the edit was not applied.")
+	{
+		FilePath = filePath;
+	}
+
+	public StaleWriteException(string filePath, string message)
+		: base(message)
+	{
+		FilePath = filePath;
+	}
+}

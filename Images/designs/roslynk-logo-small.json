@@ -1,0 +1,90 @@
+{
+  "canvas": {
+    "width_mm": 101.6,
+    "height_mm": 101.6
+  },
+  "palette": [
+    "#30c9f4",
+    "#9463ef",
+    "#ffffff",
+    "#101827"
+  ],
+  "defaults": {
+    "font_family": "Liberation Sans"
+  },
+  "metadata": {
+    "title": "Roslynk CLI small logo",
+    "description": "Terminal prompt and cursor in cyan and purple. Semantic C# CLI."
+  },
+  "elements": [
+    {
+      "type": "rounded_rectangle",
+      "id": "terminal",
+      "x_mm": 20.32,
+      "y_mm": 25.4,
+      "width_mm": 60.96,
+      "height_mm": 51.816,
+      "fill": "#101827",
+      "radius_mm": 8.128
+    },
+    {
+      "type": "rectangle",
+      "id": "top-bar",
+      "x_mm": 29.464,
+      "y_mm": 35.56,
+      "width_mm": 8.128,
+      "height_mm": 3.048,
+      "fill": "#30c9f4"
+    },
+    {
+      "type": "rectangle",
+      "id": "top-bar-two",
+      "x_mm": 40.64,
+      "y_mm": 35.56,
+      "width_mm": 8.128,
+      "height_mm": 3.048,
+      "fill": "#9463ef"
+    },
+    {
+      "type": "polygon",
+      "id": "prompt",
+      "points": [
+        [
+          30.48,
+          45.72
+        ],
+        [
+          40.2336,
+          53.848
+        ],
+        [
+          30.48,
+          61.976
+        ],
+        [
+          33.40608,
+          64.90208
+        ],
+        [
+          45.76064,
+          53.848
+        ],
+        [
+          33.40608,
+          42.79392
+        ]
+      ],
+      "closed": true,
+      "fill": "#30c9f4"
+    },
+    {
+      "type": "rectangle",
+      "id": "cursor",
+      "x_mm": 52.832,
+      "y_mm": 60.96,
+      "width_mm": 14.224,
+      "height_mm": 4.064,
+      "fill": "#9463ef"
+    }
+  ]
+}

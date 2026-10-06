@@ -1,0 +1,37 @@
+namespace SimCube.Roslynk.Protocol;
+
+public enum RequestKind : ushort
+{
+	Hello = 1,
+	Ping = 2,
+	ServerStatus = 3,
+	Stop = 4,
+	GetCallers = 10,
+	ApplyCodeAction = 11,
+	ApplyCodeFix = 12,
+	GetCodeActions = 13,
+	FindDeadConditionals = 14,
+	FindDeadCode = 15,
+	GetDiagnostics = 16,
+	MultiQuery = 17,
+	ApplyPatch = 18,
+	ExtractMethod = 19,
+	FindReads = 20,
+	FindReferences = 21,
+	FindWrites = 22,
+	RenameSymbol = 23,
+	ChangeSignature = 24,
+	RenameParameter = 25,
+	GetSolutionStatus = 26,
+	OpenSolution = 27,
+	ReloadSolution = 28,
+	FindDefinition = 29,
+	FindImplementations = 30,
+	GetExpressionInfo = 31,
+	GetMembers = 32,
+	GetSymbol = 33,
+	GetSymbolBody = 34,
+	GetTypeHierarchy = 35,
+	SearchSymbols = 36,
+	RemoveUnusedUsings = 37
+}

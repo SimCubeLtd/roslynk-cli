@@ -1,0 +1,122 @@
+namespace SimCube.Roslynk.Core.Infrastructure.Outlines;
+
+/// <summary>
+/// Recurring fragments shared by the tools' <c>[Description]</c> attributes, so the wording for the common
+/// output shape (the kind vocabulary, the location format, the pipe-delimited list, the header/error block)
+/// is defined once and interpolated into each attribute via a constant interpolated string rather than
+/// copied. Every member is a compile-time <c>const</c> so it is legal inside an attribute argument.
+/// </summary>
+internal static class OutlineDescriptions
+{
+	/// <summary>The vocabulary a &lt;kind&gt; field can take.</summary>
+	public const string KindList = "method|localfunction|property|field|event|class|struct|interface|enum|delegate";
+
+	/// <summary>How a single &lt;loc&gt; is written.</summary>
+	public const string Loc = "a location is line:col, or startLine:startCol-endLine:endCol when it spans lines";
+
+	/// <summary>How a list of locations is written inside one comma-delimited leaf.</summary>
+	public const string LocList = "multiple locations are pipe-delimited (loc|loc|...) so they sit inside the comma-delimited line";
+
+	/// <summary>How the owning project labels path-bearing output (a .csproj extension is omitted).</summary>
+	public const string Project =
+		"each path is labelled with its owning project (the project file name, with a .csproj extension omitted "
+		+ "but others such as .vbproj kept): as a #project=<project> header before a single #path, or as the "
+		+ "outermost node above the path in a nested body; it is absent when the result has no source (a metadata symbol)";
+
+	/// <summary>How a file path in a nested body is split into a folder line and a file-name child.</summary>
+	public const string FilePathSplit =
+		"in a nested body a file path is split into a folder line with the file name nested beneath it, so files "
+		+ "that share a folder list the folder once (a file at the solution root has no folder line)";
+
+	/// <summary>How a name that itself contains a comma is encoded inside a comma-delimited leaf.</summary>
+	public const string ListFieldQuoting =
+		"a type or member name that itself contains a comma (a generic type with several type arguments, e.g. "
+		+ "Dictionary<string, int>) is wrapped in single quotes so the comma is not read as a field separator";
+
+	/// <summary>
+	/// The freshness contract: results are a point-in-time snapshot of a solution that is edited live, so a
+	/// prior response may already be stale. Interpolated into every tool's description — directly, or via
+	/// <see cref="CommonMethodInstructions"/> for the outline-shaped tools.
+	/// </summary>
+	public const string Freshness =
+		"Results reflect the solution's state at the moment of the call. The solution is edited live, so a "
+		+ "prior response may be out of date; always re-query rather than reuse an earlier result.";
+
+	/// <summary>
+	/// How symbol tools treat inactive #if/#else branches: Roslynk builds derived compilations toggling each
+	/// uniformly-defined preprocessor symbol and unions the results, so a symbol referenced only in an
+	/// inactive branch is still found (and still renamed).
+	/// </summary>
+	public const string ProjectionCoverage =
+		"Inactive #if/#else branches are covered: Roslynk builds derived compilations toggling each "
+		+ "uniformly-defined preprocessor symbol and unions the results, so a symbol used only in an "
+		+ "inactive branch is still found.";
+
+	/// <summary>The common preamble for outline-shaped tools: the output shape (a text block, not JSON) plus the
+	/// freshness contract.
+	/// </summary>
+	public const string CommonMethodInstructions =
+		$"""
+		Returns a compact text outline, not JSON: 'key=value' header lines, a blank line, then a 
+		tab-indented body. Headers are the lines before the blank line; the body follows it; a result with no
+		blank line is all headers. Newlines are '\\n'; booleans are Y or N. A status header is present only when
+		the solution is not Ready (Building or Faulted); its absence means Ready.
+		When a parameter specifies a default value you should not pass a value to it unless you certainly need
+		the non-default behaviour.
+		{Freshness}
+		""";
+
+	/// <summary>How a capped (paginated) result announces that it dropped rows, when the total is known.</summary>
+	public const string Truncation =
+		"If the result is capped at maxResults, a count=<total available> and truncated=Y header precede the "
+		+ "body; both are absent when nothing was dropped, so the body is then the complete set.";
+
+	/// <summary>
+	/// How a capped result announces truncation when it cannot cheaply know the total (a scan that
+	/// early-exits), so only the flag is emitted.
+	/// </summary>
+	public const string TruncationFlag =
+		"A truncated=Y header is present only when more results exist beyond maxResults; it is absent otherwise.";
+
+	/// <summary>The shared failure shape every tool falls back to.</summary>
+	public const string ErrorBlock =
+		"On failure the result is header only: error=<Indexing|NotFound|Ambiguous|...>, errorMessage=..., "
+		+ "and zero or more candidate=<name>. A candidate is an exact name this same tool accepts: send one "
+		+ "back verbatim as the name argument and it resolves to that one symbol.";
+
+	/// <summary>
+	/// The grammar a name-taking parameter accepts, interpolated into each tool's symbolName/typeName/
+	/// methodName description so the round-trip contract is stated where a caller reads it.
+	/// </summary>
+	public const string SymbolNameGrammar =
+		"A method or indexer may carry a parameter-type list to target one overload, e.g. "
+		+ "'MyNamespace.MyType.MyMethod(int, string)' or 'MyNamespace.MyType.this[int]'; parameter names, "
+		+ "default values and nullable annotations are ignored, and fully-qualified parameter types are "
+		+ "accepted too. Written without a list the name matches every overload, which is reported as "
+		+ "error=Ambiguous with one candidate per overload. A local function is named as a member of the method "
+		+ "(or property, constructor, or outer local function) that declares it, e.g. 'MyNamespace.MyType.MyMethod.local' "
+		+ "or 'MyNamespace.MyType.MyMethod.outer.inner'; any segment may carry its own parameter list to pick an "
+		+ "overload, e.g. 'MyNamespace.MyType.MyMethod(int).local(string)'.";
+
+	/// <summary>How find_reads/find_writes name their target, including the 'Member:parameter' form.</summary>
+	public const string AccessSymbolName =
+		"Fully-qualified name of a field or property, e.g. 'MyNamespace.MyType.MyField'; for a parameter, the "
+		+ "fully-qualified name of its containing method, constructor, indexer or local function, then ':' and the "
+		+ "parameter name, e.g. 'MyNamespace.MyType.MyMethod:value' or 'MyNamespace.MyType.MyMethod(int):value'. "
+		+ "Local variables are not supported (error=NotSupported). " + SymbolNameGrammar;
+
+	/// <summary>The access-kind vocabulary and dual read/write rule shared by find_reads and find_writes.</summary>
+	public const string AccessKinds =
+		"accessKind is one of read, assign (simple '='), compound ('+=', '??=' and friends), increment ('++'/'--'), "
+		+ "ref (passed by ref, 'ref x', or '&x'), out (passed as out), init (a declaration initialiser, an object or "
+		+ "'with' initialiser, an attribute named argument, or an assignment to the constructor's own field/property "
+		+ "in its constructor). compound, increment and ref both read and write: each such location appears in BOTH "
+		+ "find_reads and find_writes with the same accessKind, so do not add the two tools' counts together. "
+		+ "nameof(...), doc-comment crefs and named arguments ('M(value: 1)') are neither, and are omitted.";
+
+	/// <summary>The projection limitation stated for find_reads/find_writes.</summary>
+	public const string AccessCoverage =
+		"Coverage: every loaded target framework, plus derived compilations each toggling ONE preprocessor symbol "
+		+ "that is uniformly defined or undefined across the C# projects; a #if branch reachable only with several "
+		+ "symbols toggled at once, or guarded by a symbol defined in some projects but not others, is not analysed.";
+}

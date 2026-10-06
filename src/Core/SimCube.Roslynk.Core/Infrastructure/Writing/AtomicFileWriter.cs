@@ -1,0 +1,93 @@
+namespace SimCube.Roslynk.Core.Infrastructure.Writing;
+
+using System.Text;
+
+/// <summary>
+/// Commits a batch of full-file rewrites atomically. Each file is written to a temp copy first, then
+/// swapped in with <see cref="File.Replace(string, string, string)"/> (atomic per file, no torn reads),
+/// keeping a backup. If any swap in the batch fails, the already-swapped files are restored from their
+/// backups, so the batch is all-or-nothing within the process.
+/// </summary>
+internal static class AtomicFileWriter
+{
+	/// <summary>The suffix of the temp sibling a write is staged to before the swap. Staging files live
+	/// next to the target inside watched directories, so the file watcher must treat this suffix (and
+	/// <see cref="BackupFileSuffix"/>) as the server's own write activity, never a user edit.</summary>
+	public const string TempFileSuffix = ".roslynk.tmp";
+
+	/// <summary>The suffix of the backup sibling the previous content is parked at during the swap.</summary>
+	public const string BackupFileSuffix = ".roslynk.bak";
+
+	private static readonly Encoding DefaultUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+	public static async Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, CancellationToken cancellationToken = default)
+	{
+		var staged = new List<StagedFile>();
+		foreach (PendingWrite write in writes)
+		{
+			string tempPath = write.FilePath + TempFileSuffix;
+			await File.WriteAllTextAsync(tempPath, write.Text, write.Encoding ?? DefaultUtf8, cancellationToken);
+			staged.Add(new StagedFile(write.FilePath, tempPath, write.FilePath + BackupFileSuffix));
+		}
+
+		Commit(staged);
+	}
+
+	private static void Commit(List<StagedFile> staged)
+	{
+		var committed = new List<StagedFile>();
+		try
+		{
+			foreach (StagedFile file in staged)
+			{
+				File.Replace(file.TempPath, file.Path, file.BackupPath);
+				committed.Add(file);
+			}
+		}
+		catch
+		{
+			foreach (StagedFile file in committed)
+			{
+				if (File.Exists(file.BackupPath))
+					File.Replace(file.BackupPath, file.Path, destinationBackupFileName: null);
+			}
+
+			throw;
+		}
+		finally
+		{
+			foreach (StagedFile file in staged)
+			{
+				TryDelete(file.BackupPath);
+				TryDelete(file.TempPath);
+			}
+		}
+	}
+
+	private static void TryDelete(string path)
+	{
+		try
+		{
+			if (File.Exists(path))
+				File.Delete(path);
+		}
+		catch
+		{
+			// Best-effort cleanup of temp/backup files.
+		}
+	}
+
+	private readonly struct StagedFile
+	{
+		public string Path { get; }
+		public string TempPath { get; }
+		public string BackupPath { get; }
+
+		public StagedFile(string path, string tempPath, string backupPath)
+		{
+			Path = path;
+			TempPath = tempPath;
+			BackupPath = backupPath;
+		}
+	}
+}

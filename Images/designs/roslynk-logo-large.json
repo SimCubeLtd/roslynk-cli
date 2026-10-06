@@ -1,0 +1,112 @@
+{
+  "canvas": {
+    "width_mm": 101.6,
+    "height_mm": 101.6
+  },
+  "palette": [
+    "#30c9f4",
+    "#9463ef",
+    "#ffffff",
+    "#101827"
+  ],
+  "defaults": {
+    "font_family": "Liberation Sans"
+  },
+  "metadata": {
+    "title": "Roslynk CLI large logo",
+    "description": "Terminal prompt and cursor in cyan and purple. Semantic C# CLI."
+  },
+  "elements": [
+    {
+      "type": "rounded_rectangle",
+      "id": "terminal",
+      "x_mm": 20.32,
+      "y_mm": 12.192,
+      "width_mm": 60.96,
+      "height_mm": 51.816,
+      "fill": "#101827",
+      "radius_mm": 8.128
+    },
+    {
+      "type": "rectangle",
+      "id": "top-bar",
+      "x_mm": 29.464,
+      "y_mm": 22.352,
+      "width_mm": 8.128,
+      "height_mm": 3.048,
+      "fill": "#30c9f4"
+    },
+    {
+      "type": "rectangle",
+      "id": "top-bar-two",
+      "x_mm": 40.64,
+      "y_mm": 22.352,
+      "width_mm": 8.128,
+      "height_mm": 3.048,
+      "fill": "#9463ef"
+    },
+    {
+      "type": "polygon",
+      "id": "prompt",
+      "points": [
+        [
+          30.48,
+          32.512
+        ],
+        [
+          40.2336,
+          40.64
+        ],
+        [
+          30.48,
+          48.768
+        ],
+        [
+          33.40608,
+          51.69408
+        ],
+        [
+          45.76064,
+          40.64
+        ],
+        [
+          33.40608,
+          29.58592
+        ]
+      ],
+      "closed": true,
+      "fill": "#30c9f4"
+    },
+    {
+      "type": "rectangle",
+      "id": "cursor",
+      "x_mm": 52.832,
+      "y_mm": 47.752,
+      "width_mm": 14.224,
+      "height_mm": 4.064,
+      "fill": "#9463ef"
+    },
+    {
+      "type": "text",
+      "id": "wordmark",
+      "value": "Roslynk",
+      "x_mm": 50.8,
+      "y_mm": 84.328,
+      "size_mm": 18.288,
+      "weight": 700,
+      "align": "centre",
+      "fill": "#ffffff"
+    },
+    {
+      "type": "text",
+      "id": "descriptor",
+      "value": "SEMANTIC C# CLI",
+      "x_mm": 50.8,
+      "y_mm": 95.504,
+      "size_mm": 4.572,
+      "weight": 700,
+      "align": "centre",
+      "fill": "#30c9f4"
+    }
+  ]
+}

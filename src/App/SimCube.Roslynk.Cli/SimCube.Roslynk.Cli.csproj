@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup>
+  <OutputType>Exe</OutputType>
+  <PackAsTool>true</PackAsTool>
+  <ToolCommandName>roslynk-cli</ToolCommandName>
+  <PackageId>Roslynk-cli</PackageId>
+  <Description>C# semantic queries and refactors with a warm local Roslyn daemon.</Description>
+  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  <PackageProjectUrl>https://github.com/SimCubeLtd/roslynk-cli</PackageProjectUrl>
+  <RepositoryUrl>https://github.com/SimCubeLtd/roslynk-cli</RepositoryUrl>
+  <PackageTags>roslyn;csharp;cli</PackageTags>
+  <PackageReadmeFile>README.md</PackageReadmeFile>
+  <RollForward>LatestMajor</RollForward>
+ </PropertyGroup>
+ <ItemGroup>
+  <ProjectReference Include="../SimCube.Roslynk.Server/SimCube.Roslynk.Server.csproj" />
+  <ProjectReference Include="../../Protocol/SimCube.Roslynk.Protocol/SimCube.Roslynk.Protocol.csproj" />
+  <PackageReference Include="System.CommandLine" />
+  <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+  <None Include="../../../README.md" Pack="true" PackagePath="/" />
+  <InternalsVisibleTo Include="SimCube.Roslynk.TransportTests" />
+ </ItemGroup>
+</Project>

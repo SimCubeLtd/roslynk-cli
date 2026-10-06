@@ -1,0 +1,9 @@
+<Solution>
+ <Project Path="src/Core/SimCube.Roslynk.Core/SimCube.Roslynk.Core.csproj" />
+ <Project Path="src/Protocol/SimCube.Roslynk.Protocol/SimCube.Roslynk.Protocol.csproj" />
+ <Project Path="src/App/SimCube.Roslynk.Server/SimCube.Roslynk.Server.csproj" />
+ <Project Path="src/App/SimCube.Roslynk.Cli/SimCube.Roslynk.Cli.csproj" />
+ <Project Path="tests/SimCube.Roslynk.CoreTests/SimCube.Roslynk.CoreTests.csproj" />
+ <Project Path="tests/SimCube.Roslynk.TransportTests/SimCube.Roslynk.TransportTests.csproj" />
+ <Project Path="src/Benchmarks/SimCube.Roslynk.Benchmarks/SimCube.Roslynk.Benchmarks.csproj" />
+</Solution>

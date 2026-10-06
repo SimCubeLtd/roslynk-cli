@@ -1,0 +1,65 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
+using SimCube.Roslynk.Core.Infrastructure.CodeActions;
+using SimCube.Roslynk.Core.Infrastructure.Lifecycle;
+using SimCube.Roslynk.Core.Infrastructure.Outlines;
+using SimCube.Roslynk.Core.Infrastructure.Razor;
+using SimCube.Roslynk.Core.Infrastructure.Results;
+
+namespace SimCube.Roslynk.Core.Features.CodeActions.GetCodeActions;
+
+internal sealed class GetCodeActionsTool
+{
+	public const string GetCodeActionsName = "get_code_actions";
+
+	private readonly InstanceRegistry InstanceRegistry;
+	private readonly CodeActionService CodeActionService;
+
+	public GetCodeActionsTool(InstanceRegistry instanceRegistry, CodeActionService codeActionService)
+	{
+		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
+		CodeActionService = codeActionService ?? throw new ArgumentNullException(nameof(codeActionService));
+	}
+
+	public async Task<string> GetCodeActions(
+		string solutionId,
+		string documentPath,
+		int line,
+		int column,
+		int? endLine = null,
+		int? endColumn = null,
+		CancellationToken cancellationToken = default)
+	{
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
+
+		if (model.Solution is null)
+			return OutlineError.Format(Error.Indexing(), model.Status);
+
+		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(model.Solution, documentPath, cancellationToken);
+		if (source?.Document.FilePath is null)
+			return OutlineError.Format(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."), model.Status);
+
+		Document document = source.Document;
+		SourceText text = await source.GetSourceTextAsync(cancellationToken);
+		TextSpan? mapped = await source.MapToDocumentAsync(CodeActionService.SpanFor(text, line, column, endLine, endColumn), cancellationToken);
+		if (mapped is not TextSpan span)
+			return OutlineError.Format(Error.NotSupported($"{line}:{column} in '{documentPath}' is not inside C# code (an @code block, expression or directive)."), model.Status);
+
+		IReadOnlyList<DiscoveredAction> actions = await CodeActionService.DiscoverAsync(document, span, cancellationToken);
+
+		var builder = new OutlineBuilder();
+		builder.Status(model.Status);
+		builder.BeginBody();
+
+		foreach (DiscoveredAction action in actions)
+		{
+			// A Razor action is re-resolved through its .razor/.cshtml source, not the generated document's path.
+			string actionId = CodeActionService.EncodeId(source.RazorPath ?? document.FilePath, span, action);
+			string diagnosticId = action.DiagnosticId ?? "-";
+			builder.Line(0, $"{actionId},{action.Kind},{diagnosticId} {OutlineBuilder.Sanitize(action.Action.Title)}");
+		}
+
+		return builder.ToString();
+	}
+}

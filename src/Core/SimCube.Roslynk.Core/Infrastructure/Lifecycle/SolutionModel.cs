@@ -1,0 +1,46 @@
+using System.Collections.Immutable;
+using Microsoft.CodeAnalysis;
+using SimCube.Roslynk.Core.Infrastructure.Workspaces;
+
+namespace SimCube.Roslynk.Core.Infrastructure.Lifecycle;
+
+/// <summary>
+/// An immutable snapshot of a loaded solution together with its <see cref="Status"/>. Instances are swapped
+/// atomically on <see cref="RoslynInstance"/>, so a reader always sees a consistent (solution, status) pair
+/// without locking. <see cref="Solution"/> is null only before the very first load completes.
+/// </summary>
+internal sealed class SolutionModel
+{
+	/// <summary>
+	/// The generation this snapshot was published as. Fresh per swap, so two models carrying the same
+	/// <see cref="Solution"/> are still distinguishable generations. multi_query stamps envelopes with it
+	/// and lets a caller check it (expectSnapshot) before continuing a truncated batch, so a continuation
+	/// that would straddle two generations is refused (Stale) instead of silently stitching them.
+	/// </summary>
+	public Guid Id { get; init; } = Guid.NewGuid();
+
+	public required SolutionStatus Status { get; init; }
+	public Solution? Solution { get; init; }
+	public string? FaultMessage { get; init; }
+	public ImmutableDictionary<ProjectId, ProjectModel> ProjectModels { get; init; } = ImmutableDictionary<ProjectId, ProjectModel>.Empty;
+
+	/// <summary>A load or rebuild in flight, optionally still serving the previous <paramref name="solution"/>.</summary>
+	public static SolutionModel Loading(Solution? solution) =>
+		new() { Status = SolutionStatus.Building, Solution = solution };
+
+	/// <summary>An edit being applied; the previous <paramref name="solution"/> is still served until it completes.</summary>
+	public static SolutionModel Updating(Solution solution) =>
+		new() { Status = SolutionStatus.Updating, Solution = solution };
+
+	/// <summary>A published snapshot ready to be read.</summary>
+	public static SolutionModel Ready(Solution solution) =>
+		new() { Status = SolutionStatus.Ready, Solution = solution };
+
+	/// <summary>A published snapshot with per-project MSBuild properties captured at load time.</summary>
+	public static SolutionModel Ready(Solution solution, ImmutableDictionary<ProjectId, ProjectModel> projectModels) =>
+		new() { Status = SolutionStatus.Ready, Solution = solution, ProjectModels = projectModels };
+
+	/// <summary>A load that failed; <paramref name="faultMessage"/> explains why and no snapshot is served.</summary>
+	public static SolutionModel Faulted(string faultMessage) =>
+		new() { Status = SolutionStatus.Faulted, FaultMessage = faultMessage };
+}

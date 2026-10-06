@@ -1,0 +1,10 @@
+interface:
+  display_name: "Roslynk"
+  icon_small: "./assets/roslynk-logo-small.svg"
+  icon_large: "./assets/roslynk-logo-large.svg"
+  brand_color: "#30C9F4"
+  short_description: "Semantic C# queries and refactors with Roslynk"
+  default_prompt: "Use $roslynk to inspect this .NET solution and perform the semantic queries or refactors I request."
+
+policy:
+  allow_implicit_invocation: false

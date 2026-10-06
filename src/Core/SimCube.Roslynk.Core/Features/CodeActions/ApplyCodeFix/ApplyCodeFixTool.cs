@@ -1,0 +1,160 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
+using System.Collections.Immutable;
+using SimCube.Roslynk.Core.Infrastructure.CodeActions;
+using SimCube.Roslynk.Core.Infrastructure.Diagnostics;
+using SimCube.Roslynk.Core.Infrastructure.Lifecycle;
+using SimCube.Roslynk.Core.Infrastructure.Outlines;
+using SimCube.Roslynk.Core.Infrastructure.Razor;
+using SimCube.Roslynk.Core.Infrastructure.Results;
+using SimCube.Roslynk.Core.Infrastructure.Workspaces;
+using SimCube.Roslynk.Core.Infrastructure.Writing;
+
+namespace SimCube.Roslynk.Core.Features.CodeActions.ApplyCodeFix;
+
+internal sealed class ApplyCodeFixTool
+{
+	public const string ApplyCodeFixName = "apply_code_fix";
+
+	private static readonly ImmutableHashSet<string> UnnecessaryImportIds =
+		ImmutableHashSet.Create(StringComparer.Ordinal, "CS8019", "IDE0005");
+
+	private readonly InstanceRegistry InstanceRegistry;
+	private readonly CodeActionService CodeActionService;
+	private readonly ApplyPipeline ApplyPipeline;
+	private readonly DocumentDiagnosticsProvider DocumentDiagnostics;
+
+	public ApplyCodeFixTool(
+		InstanceRegistry instanceRegistry,
+		CodeActionService codeActionService,
+		ApplyPipeline applyPipeline,
+		DocumentDiagnosticsProvider documentDiagnostics)
+	{
+		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
+		CodeActionService = codeActionService ?? throw new ArgumentNullException(nameof(codeActionService));
+		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
+		DocumentDiagnostics = documentDiagnostics ?? throw new ArgumentNullException(nameof(documentDiagnostics));
+	}
+
+	public async Task<string> ApplyCodeFix(
+		string solutionId,
+		string documentPath,
+		string diagnosticId,
+		int line,
+		int column,
+		bool checkOnly = false,
+		CancellationToken cancellationToken = default)
+	{
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+		if (line < 1 || column < 1)
+			return Failure(Error.Invalid("line and column are 1-based and must be at least 1."));
+
+		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
+
+		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, documentPath, cancellationToken);
+		if (source is null)
+			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."));
+		Document document = source.Document;
+
+		var position = new LinePosition(line - 1, column - 1);
+		string notFound = $"No {diagnosticId} diagnostic was found at {line}:{column} in '{documentPath}'.";
+
+		string title;
+		Solution? changed;
+		if (source.IsRazor && UnnecessaryImportIds.Contains(diagnosticId))
+		{
+			// The compiler reports neither id in generated code, so Razor @using lines get their own analysis.
+			(changed, int removed) = await RazorUnusedUsings.RemoveAsync(solution, source, line: position.Line, cancellationToken);
+			if (removed == 0)
+				return Failure(Error.NotFound(notFound));
+			title = "Remove unnecessary usings";
+		}
+		else
+		{
+			ImmutableArray<Diagnostic> diagnostics = await DocumentDiagnostics.GetForDocumentAsync(document, cancellationToken);
+			Diagnostic? diagnostic = diagnostics
+				.Where(candidate => candidate.Id == diagnosticId && source.MapsToSource(candidate.Location) && Contains(source, candidate.Location, position))
+				.OrderBy(candidate => candidate.Location.SourceSpan.Length)
+				.FirstOrDefault();
+			if (diagnostic is null)
+				return Failure(Error.NotFound(notFound));
+
+			TextSpan span = diagnostic.Location.SourceSpan;
+			DiscoveredAction[] fixes = (await CodeActionService.DiscoverAsync(document, span, cancellationToken))
+				.Where(action => action.DiagnosticId == diagnosticId)
+				.DistinctBy(action => CodeActionService.KeyOf(action.Action), StringComparer.Ordinal)
+				.ToArray();
+			if (fixes.Length == 0)
+				return Failure(Error.NotSupported($"No fix is available for {diagnosticId}."));
+			if (fixes.Length > 1)
+			{
+				// A Razor action is re-resolved through its .razor/.cshtml source, not the generated document's path.
+				string actionPath = source.RazorPath ?? document.FilePath!;
+				string[] candidates = fixes
+					.Select(fix => $"{CodeActionService.EncodeId(actionPath, span, fix)},{fix.Kind},{diagnosticId} {fix.Action.Title}")
+					.ToArray();
+				return Failure(Error.Conflict(
+					$"{diagnosticId} at {line}:{column} has {fixes.Length} fixes; apply the chosen candidate's actionId with apply_code_action.",
+					candidates));
+			}
+
+			DiscoveredAction fix = fixes[0];
+			changed = await CodeActionService.ChangedSolutionAsync(fix.Action, cancellationToken);
+			if (changed is null)
+				return Failure(Error.Conflict("The fix produced no changes."));
+			title = fix.Action.Title;
+
+			try
+			{
+				changed = await RazorGeneratedChangeFolder.FoldAsync(solution, changed, cancellationToken);
+			}
+			catch (RazorMappingException exception)
+			{
+				return Failure(RazorGeneratedChangeFolder.ErrorFor(exception));
+			}
+		}
+
+		IReadOnlyList<string> files;
+		if (checkOnly)
+		{
+			files = ApplyPipeline.GetChangedFilePaths(solution, changed);
+		}
+		else
+		{
+			try
+			{
+				files = await ApplyPipeline.ApplyAsync(instance, changed, basedOn: solution, cancellationToken);
+			}
+			catch (StaleWriteException exception)
+			{
+				return OutlineError.Format(
+					Error.Stale(exception.Message, [SolutionRelativePath.Of(solutionDirectory, exception.FilePath) ?? exception.FilePath]),
+					instance.CurrentModel.Status);
+			}
+		}
+
+		var builder = new OutlineBuilder();
+		builder.Header("applied", !checkOnly);
+		builder.Header("action", title);
+		builder.Status(instance.CurrentModel.Status);
+		ChangedFilesOutline.Write(builder, files, instance.CurrentSolution, solutionDirectory);
+		return builder.ToString();
+	}
+
+	/// <summary>
+	/// Whether <paramref name="position"/> (0-based, in the file the caller named) lies within the diagnostic,
+	/// ends included: the Razor position for a Razor file, via the generated code's #line mapping.
+	/// </summary>
+	private static bool Contains(RazorSourceDocument source, Location location, LinePosition position)
+	{
+		FileLinePositionSpan span = source.IsRazor ? location.GetMappedLineSpan() : location.GetLineSpan();
+		return span.StartLinePosition <= position && position <= span.EndLinePosition;
+	}
+}

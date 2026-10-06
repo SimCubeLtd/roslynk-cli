@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject>
+  <OutputType>Exe</OutputType></PropertyGroup>
+ <ItemGroup>
+  <PackageReference Include="TUnit" />
+  <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+  <ProjectReference Include="../../src/App/SimCube.Roslynk.Cli/SimCube.Roslynk.Cli.csproj" />
+ </ItemGroup>
+</Project>

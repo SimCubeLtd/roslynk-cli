@@ -1,0 +1,223 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Editing;
+using Microsoft.CodeAnalysis.FindSymbols;
+using SimCube.Roslynk.Core.Infrastructure.Lifecycle;
+using SimCube.Roslynk.Core.Infrastructure.Outlines;
+using SimCube.Roslynk.Core.Infrastructure.Razor;
+using SimCube.Roslynk.Core.Infrastructure.Resolution;
+using SimCube.Roslynk.Core.Infrastructure.Results;
+using SimCube.Roslynk.Core.Infrastructure.Workspaces;
+using SimCube.Roslynk.Core.Infrastructure.Writing;
+
+namespace SimCube.Roslynk.Core.Features.Signatures.ChangeSignature;
+
+internal sealed class ChangeSignatureTool
+{
+	public const string ChangeSignatureName = "change_signature";
+
+	private readonly InstanceRegistry InstanceRegistry;
+	private readonly SymbolResolver SymbolResolver;
+	private readonly ApplyPipeline ApplyPipeline;
+
+	public ChangeSignatureTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ApplyPipeline applyPipeline)
+	{
+		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
+		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
+	}
+
+	public async Task<string> ChangeSignature(
+		string solutionId,
+		string methodId,
+		string parameterType,
+		string parameterName,
+		string defaultValue,
+		string? callSiteArgument = null,
+		bool checkOnly = false, CancellationToken cancellationToken = default)
+	{
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
+
+		if (!SyntaxFacts.IsValidIdentifier(parameterName))
+			return Failure(Error.Invalid($"'{parameterName}' is not a valid C# identifier."));
+		if (string.IsNullOrWhiteSpace(parameterType))
+			return Failure(Error.Invalid("A parameter type is required."));
+		if (string.IsNullOrWhiteSpace(defaultValue))
+			return Failure(Error.Invalid("A default value is required so the added parameter is optional and the change stays backward-compatible."));
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
+
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, methodId);
+		if (matches.Count == 0)
+		{
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, methodId);
+			return Failure(Error.NotFound($"No symbol matched '{methodId}'.", suggestions.Count > 0 ? suggestions : null));
+		}
+		if (matches.Count > 1)
+			return Failure(SymbolAmbiguity.Ambiguous(methodId, matches));
+		if (matches[0] is not IMethodSymbol method)
+			return Failure(Error.NotSupported($"'{methodId}' is not a method."));
+
+		string resolved = SymbolResolver.SignatureName(method);
+
+		string? rejection = Reject(method, parameterName);
+		if (rejection is not null)
+			return Failure(Error.NotSupported(rejection));
+
+		SyntaxNode declarationNode = await method.DeclaringSyntaxReferences[0].GetSyntaxAsync();
+		ParameterListSyntax? parameterList = declarationNode switch {
+			MethodDeclarationSyntax methodDeclaration => methodDeclaration.ParameterList,
+			LocalFunctionStatementSyntax localFunction => localFunction.ParameterList,
+			_ => null
+		};
+		if (parameterList is null)
+			return Failure(Error.NotSupported("The method is not an ordinary method or local function declaration."));
+
+		Document declarationDocument = solution.GetDocument(declarationNode.SyntaxTree)!;
+
+		IReadOnlyList<CallSite> callSites = callSiteArgument is null
+			? []
+			: await FindCallSitesAsync(solution, method);
+
+		ParameterSyntax parameter = ((ParameterListSyntax)SyntaxFactory.ParseParameterList(
+			$"({parameterType} {parameterName} = {defaultValue})")).Parameters[0].WithLeadingTrivia(SyntaxFactory.Space);
+		var editor = new SolutionEditor(solution);
+		DocumentEditor declarationEditor = await editor.GetDocumentEditorAsync(declarationDocument.Id);
+		// Replacing only the parameter list keeps the edit clear of the body, where call sites of a recursive
+		// method or of a local function's siblings are rewritten separately.
+		declarationEditor.ReplaceNode(parameterList, parameterList.AddParameters(parameter));
+
+		foreach (IGrouping<DocumentId, CallSite> group in callSites.GroupBy(callSite => callSite.DocumentId))
+		{
+			DocumentEditor documentEditor = await editor.GetDocumentEditorAsync(group.Key);
+			foreach (CallSite callSite in group)
+			{
+				ArgumentSyntax argument = ((ArgumentListSyntax)SyntaxFactory.ParseArgumentList(
+					$"({parameterName}: {callSiteArgument})")).Arguments[0].WithLeadingTrivia(SyntaxFactory.Space);
+				documentEditor.ReplaceNode(callSite.Invocation, callSite.Invocation.WithArgumentList(callSite.Invocation.ArgumentList.AddArguments(argument)));
+			}
+		}
+
+		Solution updated;
+		try
+		{
+			updated = await RazorGeneratedChangeFolder.FoldAsync(solution, editor.GetChangedSolution());
+		}
+		catch (RazorMappingException exception)
+		{
+			return Failure(RazorGeneratedChangeFolder.ErrorFor(exception));
+		}
+
+		IReadOnlyList<string> changed;
+		if (checkOnly)
+		{
+			changed = ApplyPipeline.GetChangedFilePaths(solution, updated);
+		}
+		else
+		{
+			try
+			{
+				changed = await ApplyPipeline.ApplyAsync(instance, updated, basedOn: solution, cancellationToken: cancellationToken);
+			}
+			catch (StaleWriteException exception)
+			{
+				return OutlineError.Format(
+					Error.Stale(exception.Message, [SolutionRelativePath.Of(solutionDirectory, exception.FilePath) ?? exception.FilePath]),
+					instance.CurrentModel.Status);
+			}
+		}
+
+		var builder = new OutlineBuilder();
+		builder.Header("applied", !checkOnly);
+		builder.Header("resolvedMethod", resolved);
+		builder.Header("updatedCallSites", callSites.Count);
+		builder.Status(instance.CurrentModel.Status);
+		ChangedFilesOutline.Write(builder, changed, instance.CurrentSolution, solutionDirectory);
+		return builder.ToString();
+	}
+
+	private static string? Reject(IMethodSymbol method, string parameterName)
+	{
+		if (method.MethodKind is not (MethodKind.Ordinary or MethodKind.LocalFunction))
+			return "Only ordinary methods and local functions are supported (not constructors, operators or accessors).";
+		if (method.IsVirtual || method.IsOverride || method.IsAbstract)
+			return "Virtual, override, and abstract methods are not supported; their signatures must change together across the hierarchy.";
+		if (method.ContainingType.TypeKind == TypeKind.Interface)
+			return "Interface members are not supported; the interface and every implementation must change together.";
+		if (method.ExplicitInterfaceImplementations.Length > 0 || ImplementsInterfaceMember(method))
+			return "Methods that implement an interface member are not supported; the interface and implementation must change together.";
+		if (method.DeclaringSyntaxReferences.Length != 1)
+			return "Partial methods (more than one declaration) are not supported.";
+		if (method.Parameters.Any(parameter => parameter.IsParams))
+			return "Methods with a params parameter are not supported; an optional parameter cannot be appended after it.";
+		if (method.Parameters.Any(parameter => string.Equals(parameter.Name, parameterName, StringComparison.Ordinal)))
+			return $"The method already has a parameter named '{parameterName}'.";
+
+		return null;
+	}
+
+	private static bool ImplementsInterfaceMember(IMethodSymbol method)
+	{
+		foreach (INamedTypeSymbol @interface in method.ContainingType.AllInterfaces)
+		{
+			foreach (ISymbol member in @interface.GetMembers())
+			{
+				if (member is IMethodSymbol && SymbolEqualityComparer.Default.Equals(
+					method.ContainingType.FindImplementationForInterfaceMember(member), method))
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	private static async Task<IReadOnlyList<CallSite>> FindCallSitesAsync(Solution solution, IMethodSymbol method)
+	{
+		var callSites = new List<CallSite>();
+		foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(method, solution))
+		{
+			foreach (ReferenceLocation location in referenced.Locations)
+			{
+				if (location.Location.SourceTree is null)
+					continue;
+
+				Document? document = solution.GetDocument(location.Location.SourceTree);
+				if (document is null)
+					continue;
+
+				SyntaxNode root = await location.Location.SourceTree.GetRootAsync();
+				SyntaxNode node = root.FindNode(location.Location.SourceSpan, getInnermostNodeForTie: true);
+
+				// A real call site is one where the reference sits in the callee position of an invocation;
+				// method-group, nameof, and cref uses stay valid because the added parameter is optional.
+				InvocationExpressionSyntax? invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+				if (invocation is not null && invocation.Expression.Span.Contains(location.Location.SourceSpan))
+					callSites.Add(new CallSite(document.Id, invocation));
+			}
+		}
+
+		return callSites;
+	}
+
+	private readonly struct CallSite
+	{
+		public DocumentId DocumentId { get; }
+		public InvocationExpressionSyntax Invocation { get; }
+
+		public CallSite(DocumentId documentId, InvocationExpressionSyntax invocation)
+		{
+			DocumentId = documentId;
+			Invocation = invocation;
+		}
+	}
+}
