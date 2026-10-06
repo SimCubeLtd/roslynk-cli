@@ -28,7 +28,7 @@ All 28 former MCP capabilities are preserved through typed `RoslynkApplication` 
 | `get_expression_info` | `RoslynkApplication.GetExpressionInfoAsync` | `expression` | Preserved |
 | `get_members` | `RoslynkApplication.GetMembersAsync` | `members` | Preserved |
 | `get_symbol` | `RoslynkApplication.GetSymbolAsync` | `symbol` | Preserved |
-| `get_symbol_body` | `RoslynkApplication.GetSymbolBodyAsync` | `body` | Preserved |
+| `get_symbol_body` | `RoslynkApplication.GetSymbolBodyAsync` | `body` | Preserved; explicit `--decompile` added for referenced assemblies (not in batch) |
 | `get_type_hierarchy` | `RoslynkApplication.GetTypeHierarchyAsync` | `hierarchy` | Preserved |
 | `search_symbols` | `RoslynkApplication.SearchSymbolsAsync` | `search` | Preserved |
 | `remove_unused_usings` | `RoslynkApplication.RemoveUnusedUsingsAsync` | `usings` | Preserved |

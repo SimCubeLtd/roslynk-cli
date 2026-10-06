@@ -67,7 +67,7 @@ internal sealed class RequestDispatcher(RoslynkApplication application)
 	private static Domain.GetExpressionInfoRequest Map(Transport.GetExpressionInfoRequest request) => new(request.SolutionPath, request.FilePath, request.Line, request.Column);
 	private static Domain.GetMembersRequest Map(Transport.GetMembersRequest request) => new(request.SolutionPath, request.TypeName, request.IncludeInherited, request.NameFilter, request.IncludeMethods, request.IncludeFields, request.IncludeProperties, request.IncludeEvents, request.IncludeNestedTypes);
 	private static Domain.GetSymbolRequest Map(Transport.GetSymbolRequest request) => new(request.SolutionPath, request.SymbolName);
-	private static Domain.GetSymbolBodyRequest Map(Transport.GetSymbolBodyRequest request) => new(request.SolutionPath, request.SymbolName, request.IncludeLeadingTrivia);
+	private static Domain.GetSymbolBodyRequest Map(Transport.GetSymbolBodyRequest request) => new(request.SolutionPath, request.SymbolName, request.IncludeLeadingTrivia, request.Decompile);
 	private static Domain.GetTypeHierarchyRequest Map(Transport.GetTypeHierarchyRequest request) => new(request.SolutionPath, request.TypeName);
 	private static Domain.SearchSymbolsRequest Map(Transport.SearchSymbolsRequest request) => new(request.SolutionPath, request.Query, request.MaxResults);
 	private static Domain.RemoveUnusedUsingsRequest Map(Transport.RemoveUnusedUsingsRequest request) => new(request.SolutionPath, request.DocumentPath, request.CheckOnly);

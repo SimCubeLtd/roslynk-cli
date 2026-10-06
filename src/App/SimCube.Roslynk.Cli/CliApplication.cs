@@ -309,8 +309,11 @@ internal sealed class CliApplication
 		getSymbolBody.Arguments.Add(getSymbolBodySymbolName);
 		var getSymbolBodyIncludeLeadingTrivia = new Option<bool>("--leading-trivia") { Description = "include-leading-trivia.", DefaultValueFactory = _ => false };
 		getSymbolBody.Options.Add(getSymbolBodyIncludeLeadingTrivia);
-		getSymbolBody.SetAction((parse, token) => ExecuteAsync(parse, RequestKind.GetSymbolBody, new GetSymbolBodyRequest(PathFor(parse), parse.GetValue(getSymbolBodySymbolName)!, parse.GetValue(getSymbolBodyIncludeLeadingTrivia)), token));
-		Queries["body"] = parse => new GetSymbolBodyRequest(PathFor(parse), parse.GetValue(getSymbolBodySymbolName)!, parse.GetValue(getSymbolBodyIncludeLeadingTrivia));
+		var getSymbolBodyDecompile = new Option<bool>("--decompile") { Description = "Reconstruct source for a symbol in a referenced assembly (NuGet/BCL). Not available in batch.", DefaultValueFactory = _ => false };
+		getSymbolBody.Options.Add(getSymbolBodyDecompile);
+		getSymbolBody.SetAction((parse, token) => ExecuteAsync(parse, RequestKind.GetSymbolBody, new GetSymbolBodyRequest(PathFor(parse), parse.GetValue(getSymbolBodySymbolName)!, parse.GetValue(getSymbolBodyIncludeLeadingTrivia), parse.GetValue(getSymbolBodyDecompile)), token));
+		// The flag is forwarded so the daemon rejects a batch that asks for decompilation instead of ignoring it.
+		Queries["body"] = parse => new GetSymbolBodyRequest(PathFor(parse), parse.GetValue(getSymbolBodySymbolName)!, parse.GetValue(getSymbolBodyIncludeLeadingTrivia), parse.GetValue(getSymbolBodyDecompile));
 		Root.Subcommands.Add(getSymbolBody);
 
 		var getTypeHierarchy = new Command("hierarchy", "Show base types, interfaces and derived types.");

@@ -109,6 +109,39 @@ public class GetSymbolBodyTests
 
 		await Assert.That(result).Contains("error=NotSupported");
 		await Assert.That(result).DoesNotContain("path=");
+		await Assert.That(result).DoesNotContain("source=decompiled");
+	}
+
+	[Test]
+	public async Task WhenDecompilationIsRequestedForAFrameworkMethod_ThenItsBodyIsReconstructed()
+	{
+		// The compilation references System.Runtime as a reference assembly that only forwards String, so this
+		// covers both the swap to the implementation and following the forward to System.Private.CoreLib.
+		string result = await RunAsync("System.String.Substring(int)", decompile: true);
+
+		await Assert.That(result).DoesNotContain("error=");
+		await Assert.That(result).Contains("source=decompiled\n");
+		await Assert.That(result).Contains("assembly=System.Private.CoreLib\n");
+		await Assert.That(result).Contains("Substring(int startIndex)");
+		await Assert.That(Body(result)).Contains("return");
+	}
+
+	[Test]
+	public async Task WhenDecompilationIsRequestedForASourceSymbol_ThenTheRealSourceIsReturned()
+	{
+		string result = await RunAsync("SimpleLibrary.Calculator.Add", decompile: true);
+
+		await Assert.That(result).Contains("path=SimpleLibrary/Calculator.cs\n");
+		await Assert.That(result).DoesNotContain("source=decompiled");
+	}
+
+	[Test]
+	public async Task WhenDecompilationMatchesSeveralMetadataOverloads_ThenAmbiguousIsReturned()
+	{
+		string result = await RunAsync("System.String.Substring", decompile: true);
+
+		await Assert.That(result).Contains("error=Ambiguous");
+		await Assert.That(result).Contains("candidate=System.String.Substring(int)");
 	}
 
 	[Test]
@@ -173,12 +206,12 @@ public class GetSymbolBodyTests
 		await Assert.That(result).DoesNotContain("Adds <paramref");
 	}
 
-	private static async Task<string> RunAsync(string symbolName, bool includeLeadingTrivia = false)
+	private static async Task<string> RunAsync(string symbolName, bool includeLeadingTrivia = false, bool decompile = false)
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
 
-		return await subject.GetSymbolBody(TestSolutions.Simple, symbolName, includeLeadingTrivia);
+		return await subject.GetSymbolBody(TestSolutions.Simple, symbolName, includeLeadingTrivia, decompile);
 	}
 }

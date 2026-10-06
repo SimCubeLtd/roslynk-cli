@@ -56,6 +56,8 @@ roslynk-cli definition src/Orders.cs 42 13
 roslynk-cli batch 'refs MyApp.OrderService.Process' 'callers MyApp.OrderService.Process'
 ```
 
+`body` returns NotSupported for a symbol that only exists in a referenced assembly (a NuGet package or the BCL). To read framework or library code, pass `--decompile` explicitly: `roslynk-cli body 'Some.Library.Type.Method(int)' --decompile`. The result is marked `source=decompiled` and is reconstructed from IL, not the original source; run-time generated code is not visible. It is a standalone command and is rejected inside `batch`.
+
 `batch` accepts 14 read-only query kinds, up to 25 operations on one immutable snapshot. Diagnostics, actions, writes and lifecycle commands are excluded. Check each slot for failure/truncation. For a follow-up batch requiring the same publication, pass its returned ID with `--expect-snapshot`; if rejected, gather a fresh batch rather than combining generations. A 200,000-character budget can omit later slots. Single-query result limits can also truncate results; increase supported `--max-results` values deliberately and report incomplete coverage.
 
 ## Interpret diagnostics and output
@@ -95,4 +97,4 @@ Watchers fold ordinary C# changes and trigger lazy rebuilds for build/generator/
 
 For Indexing/Building, inspect `solution status` and allow loading to finish. For Faulted, inspect the failure and load status before retrying. For NotFound/Ambiguous, check the solution, name and candidates. Invalid/NotSupported needs a corrected request or supported approach. Truncated needs narrower queries or an explicit incomplete-results report.
 
-Use `server status` and `server ping --timing` to inspect the daemon without loading a solution. After a tool upgrade, `server stop` can stop an incompatible daemon and the next semantic command starts the installed version. Restarting affects all loaded solutions on that endpoint. See [running and troubleshooting](references/operations.md) for logs, isolated development daemons and Linux watcher limits.
+Use `server status` and `server ping --timing` to inspect the daemon without loading a solution. After a tool upgrade, `server stop` can stop an incompatible daemon and the next semantic command starts the installed version. Restarting affects all loaded solutions on that endpoint. The daemon stops by itself when idle eviction (30 minutes by default) closes its last loaded solution; the next semantic command starts it again and reloads the solution. See [running and troubleshooting](references/operations.md) for logs, isolated development daemons and Linux watcher limits.

@@ -267,8 +267,15 @@ Batch availability: yes.
 | Option | Default |
 | --- | --- |
 | `--leading-trivia` | `false` |
+| `--decompile` | `false` |
 
-Batch availability: yes.
+Without `--decompile`, a symbol declared only in a referenced assembly (a NuGet package or the BCL) returns NotSupported. With it, the declaration is reconstructed from that assembly's IL and returned with `source=decompiled`, `assembly=<name>` and `file=<absolute path of the assembly read>` headers in place of project, path and loc. Symbols with source are unaffected and still return verbatim source.
+
+Decompiled text is not the original source. Comments are absent (XML documentation appears only when the package ships it), local names can be invented, and async, iterator and lambda code is reconstructed. Code a library generates at run time is not visible. BCL symbols are read from the installed shared runtime, because compilations reference bodiless reference assemblies; when the targeted runtime version is not installed the newest installed one is used, and `file` shows which. Name one overload: an ambiguous name returns candidates. Closed generic type names are not resolved. NotSupported is returned when no implementation assembly is found or the member cannot be decompiled.
+
+The first request for an assembly loads it, typically a few hundred milliseconds. Up to four assemblies stay cached per loaded solution until that solution is evicted.
+
+Batch availability: yes, without `--decompile`. A batch containing `--decompile` is rejected as Invalid.
 
 ## hierarchy
 
@@ -306,7 +313,7 @@ Batch availability: no.
 - Symbol names are fully qualified. Optional parameter-type lists choose overloads. Local functions use their enclosing member name; container overloads can also carry signatures. Candidate names round-trip into the same command.
 - Queries cover the base compilation and single-symbol conditional projections. Mixed-definition symbols are skipped, and all possible multi-symbol combinations are not enumerated. Matching signatures across projects can collapse into one semantic identity.
 - `reads`/`writes` accept fields, properties and parameters, with parameters written `N.T.Method:parameter`. Access tags are read, assign, compound, increment, ref, out and init. Compound/increment/ref appear in both results.
-- `symbol` reports a declaration or metadata identity. `body` preserves full declarations and original source formatting. `expression` reports compiler binding, types/conversions, nullable flow, constants, source origin and documentation; unavailable facts are none.
+- `symbol` reports a declaration or metadata identity. `body` preserves full declarations and original source formatting; with `--decompile` it reconstructs referenced-assembly declarations, marked `source=decompiled`. `expression` reports compiler binding, types/conversions, nullable flow, constants, source origin and documentation; unavailable facts are none.
 - `diagnostics`/`diag` always report error/warning/info/hidden counts; switches select details, and analyzers are enabled by default. Set `--errors false --warnings false` for counts-only output. Diagnostics drain preceding writes and map positions against the solution actually compiled. Private fixer-trigger IDs are hidden.
 - `actions` returns opaque action IDs. `apply-action` rediscovers the action. `fix` requires the diagnostic ID and exact source position. Several distinct fixes return Conflict with candidate action IDs and write nothing; choose an action rather than silently changing declared intent.
 - `rename` preserves conditional branches, linked/multi-target physical paths and Razor references. `rename-parameter` includes named arguments and the override/interface family.

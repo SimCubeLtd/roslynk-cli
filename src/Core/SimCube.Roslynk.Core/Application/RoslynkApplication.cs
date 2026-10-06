@@ -27,10 +27,21 @@ public sealed class RoslynkApplication
 		if (model.Status == SolutionStatus.Faulted) throw new InvalidOperationException(model.FaultMessage);
 	}
 	/// <summary>Evicts idle solutions only while the application is quiescent. Does not interrupt active reads or writes.</summary>
-	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc)
+	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc) => EvictIdle(idleFor, nowUtc, out _);
+
+	/// <summary>
+	/// As <see cref="EvictIdle(TimeSpan, DateTime)"/>. <paramref name="closedLastSolution"/> is true when this call
+	/// evicted at least one solution and left none loaded, which is the host's signal that it is no longer needed.
+	/// An application that never loaded a solution does not report it.
+	/// </summary>
+	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc, out bool closedLastSolution)
 	{
 		lock (MaintenanceGate)
-			return ActiveOperations == 0 ? Registry.EvictIdle(idleFor, nowUtc) : 0;
+		{
+			int evicted = ActiveOperations == 0 ? Registry.EvictIdle(idleFor, nowUtc) : 0;
+			closedLastSolution = evicted > 0 && Registry.LoadedInstances().Count == 0;
+			return evicted;
+		}
 	}
 	private async Task<OperationResult> ExecuteAsync(Func<Task<string>> action)
 	{
@@ -188,7 +199,7 @@ public sealed class RoslynkApplication
 	public Task<OperationResult> GetSymbolBodyAsync(GetSymbolBodyRequest request, CancellationToken cancellationToken = default) => ExecuteAsync(async () =>
 	{
 		await PrepareAsync(request.SolutionPath, cancellationToken);
-		return await Provider.GetRequiredService<SimCube.Roslynk.Core.Features.Symbols.GetSymbolBody.GetSymbolBodyTool>().GetSymbolBody(request.SolutionPath, request.SymbolName, request.IncludeLeadingTrivia, cancellationToken);
+		return await Provider.GetRequiredService<SimCube.Roslynk.Core.Features.Symbols.GetSymbolBody.GetSymbolBodyTool>().GetSymbolBody(request.SolutionPath, request.SymbolName, request.IncludeLeadingTrivia, request.Decompile, cancellationToken);
 	});
 
 	public Task<OperationResult> GetTypeHierarchyAsync(GetTypeHierarchyRequest request, CancellationToken cancellationToken = default) => ExecuteAsync(async () =>
@@ -221,6 +232,7 @@ public sealed class RoslynkApplication
 		GetExpressionInfoQuery query => new(MultiQueryOp.get_expression_info, new Dictionary<string, JsonElement> { ["filePath"] = JsonSerializer.SerializeToElement(query.Request.FilePath), ["line"] = JsonSerializer.SerializeToElement(query.Request.Line), ["column"] = JsonSerializer.SerializeToElement(query.Request.Column) }),
 		GetMembersQuery query => new(MultiQueryOp.get_members, new Dictionary<string, JsonElement> { ["typeName"] = JsonSerializer.SerializeToElement(query.Request.TypeName), ["includeInherited"] = JsonSerializer.SerializeToElement(query.Request.IncludeInherited), ["nameFilter"] = JsonSerializer.SerializeToElement(query.Request.NameFilter), ["includeMethods"] = JsonSerializer.SerializeToElement(query.Request.IncludeMethods), ["includeFields"] = JsonSerializer.SerializeToElement(query.Request.IncludeFields), ["includeProperties"] = JsonSerializer.SerializeToElement(query.Request.IncludeProperties), ["includeEvents"] = JsonSerializer.SerializeToElement(query.Request.IncludeEvents), ["includeNestedTypes"] = JsonSerializer.SerializeToElement(query.Request.IncludeNestedTypes) }),
 		GetSymbolQuery query => new(MultiQueryOp.get_symbol, new Dictionary<string, JsonElement> { ["symbolName"] = JsonSerializer.SerializeToElement(query.Request.SymbolName) }),
+		GetSymbolBodyQuery { Request.Decompile: true } => throw new ArgumentException("Decompilation is not available in a batch; run body --decompile as its own command."),
 		GetSymbolBodyQuery query => new(MultiQueryOp.get_symbol_body, new Dictionary<string, JsonElement> { ["symbolName"] = JsonSerializer.SerializeToElement(query.Request.SymbolName), ["includeLeadingTrivia"] = JsonSerializer.SerializeToElement(query.Request.IncludeLeadingTrivia) }),
 		GetTypeHierarchyQuery query => new(MultiQueryOp.get_type_hierarchy, new Dictionary<string, JsonElement> { ["typeName"] = JsonSerializer.SerializeToElement(query.Request.TypeName) }),
 		SearchSymbolsQuery query => new(MultiQueryOp.search_symbols, new Dictionary<string, JsonElement> { ["query"] = JsonSerializer.SerializeToElement(query.Request.Query), ["maxResults"] = JsonSerializer.SerializeToElement(query.Request.MaxResults) }),

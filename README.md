@@ -55,6 +55,8 @@ roslynk-cli solution reload --solution src/MyApp.slnx
 
 Navigation includes `symbol`, `body`, `members`, `search`, `definition`, `expression`, `refs`, `reads`, `writes`, `callers`, `implementations` and `hierarchy`. Diagnostics and analysis include `diagnostics`/`diag`, `dead-code` and `dead-conditionals`. Editing includes `rename`, `rename-parameter`, `change-signature`, `extract`, `usings`, `actions`, `apply-action`, `fix` and `patch`.
 
+`body` reads source declared in the solution. For a symbol that only exists in a referenced assembly, such as a NuGet package or the BCL, pass `--decompile` to get C# reconstructed from its IL, marked `source=decompiled`. It never happens implicitly and is not available in `batch`.
+
 Positions are 1-based. Existing source paths are resolved from the current directory; otherwise paths are interpreted relative to the solution directory. Use fully-qualified symbol names; include parameter types to select an overload. Local functions use the enclosing member's name, such as `N.T.Method(int).local(string)`. Copy exact candidate names from ambiguous results.
 
 ```sh
@@ -82,7 +84,7 @@ The daemon uses MessagePack with bounded length-prefixed frames over a Unix doma
 
 CLI and server versions must match. After upgrading, `roslynk-cli server stop` also works against an incompatible daemon; the next command starts the installed version. The CLI locates the bundled server itself.
 
-Logs go to `daemon.log` in the private endpoint directory, normally a `roslynk-<user-hash>` directory under the OS temp directory. `ROSLYNK_ENDPOINT_DIRECTORY` can select an isolated short endpoint directory for tests or separate daemon instances. Unix overrides must be real private directories. `ROSLYNK_IDLE_MINUTES` defaults to 30 and disables idle solution eviction when set to zero. Active operations are protected from eviction. The daemon process itself stays alive.
+Logs go to `daemon.log` in the private endpoint directory, normally a `roslynk-<user-hash>` directory under the OS temp directory. `ROSLYNK_ENDPOINT_DIRECTORY` can select an isolated short endpoint directory for tests or separate daemon instances. Unix overrides must be real private directories. `ROSLYNK_IDLE_MINUTES` defaults to 30 and disables idle solution eviction when set to zero. Active operations are protected from eviction. When eviction closes the last loaded solution the daemon process stops too, and the next semantic command starts a new one. A daemon that never loaded a solution keeps running until `roslynk-cli server stop`.
 
 Core retains OpenTelemetry-compatible `ActivitySource`/`Meter` instrumentation, and Server emits operation spans. The bundled OTLP exporter is removed to keep HTTP/gRPC export paths out of the application. Use external .NET diagnostics tooling to observe instrumentation.
 
