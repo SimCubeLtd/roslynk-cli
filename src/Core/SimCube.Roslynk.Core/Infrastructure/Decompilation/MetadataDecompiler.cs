@@ -24,6 +24,9 @@ internal sealed class MetadataDecompiler
 	/// <summary>Each entry holds one assembly image plus the metadata of everything it references.</summary>
 	private const int Capacity = 4;
 
+	/// <summary>How many assemblies a forwarded type is followed through before giving up.</summary>
+	private const int MaxForwards = 8;
+
 	private readonly object Gate = new();
 	private readonly List<(CacheKey Key, Lazy<DecompilerTypeSystem> TypeSystem)> Cache = [];
 
@@ -42,22 +45,29 @@ internal sealed class MetadataDecompiler
 		try
 		{
 			string path = ReferenceAssemblies.ResolveImplementation(assemblyPath);
-			DecompilerTypeSystem typeSystem = TypeSystemFor(path, searchDirectories);
 
-			IEntity entity = IdStringProvider.FindEntity(documentationId, new SimpleTypeResolveContext(typeSystem))
-				?? throw new DecompilationException($"No declaration for it was found in '{Path.GetFileName(path)}'.");
-
-			// The token is only meaningful in the module that defines the entity, which is another file when
-			// the requested assembly merely forwards the type (System.Runtime to System.Private.CoreLib).
-			if (entity.ParentModule?.MetadataFile is { } owner && owner != typeSystem.MainModule.MetadataFile)
+			for (int forwards = 0; forwards <= MaxForwards; forwards++)
 			{
-				path = owner.FileName;
-				typeSystem = TypeSystemFor(path, searchDirectories);
+				DecompilerTypeSystem typeSystem = TypeSystemFor(path, searchDirectories);
+
+				IEntity entity = IdStringProvider.FindEntity(documentationId, new SimpleTypeResolveContext(typeSystem))
+					?? throw new DecompilationException($"No declaration for it was found in '{Path.GetFileName(path)}'.");
+
+				if (entity.ParentModule?.MetadataFile is not { } owner || owner == typeSystem.MainModule.MetadataFile)
+				{
+					var decompiler = new CSharpDecompiler(typeSystem, Settings()) { CancellationToken = cancellationToken };
+					string text = decompiler.DecompileAsString(entity.MetadataToken).Trim();
+					return new DecompiledSource(typeSystem.MainModule.AssemblyName, path, text);
+				}
+
+				// The assembly only forwards the type (System.Runtime to System.Private.CoreLib). The file that
+				// defines it was found through the solution's reference directories, so it can itself be a
+				// bodiless reference assembly. Its implementation is looked up again by ID, because a token is
+				// only meaningful in the file it came from.
+				path = ReferenceAssemblies.ResolveImplementation(owner.FileName);
 			}
 
-			var decompiler = new CSharpDecompiler(typeSystem, Settings()) { CancellationToken = cancellationToken };
-			string text = decompiler.DecompileAsString(entity.MetadataToken).Trim();
-			return new DecompiledSource(typeSystem.MainModule.AssemblyName, path, text);
+			throw new DecompilationException("Its type is forwarded through too many assemblies.");
 		}
 		catch (Exception exception) when (exception is not (OperationCanceledException or DecompilationException))
 		{
