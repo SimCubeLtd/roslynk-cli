@@ -39,6 +39,20 @@ public sealed class ApplicationBoundaryTests
 	}
 
 	[Test]
+	public async Task WhenABatchAsksForDecompilation_ThenItIsRejectedInsteadOfIgnored()
+	{
+		var services = new ServiceCollection();
+		services.AddRoslynk();
+		using ServiceProvider provider = services.BuildServiceProvider();
+		RoslynkApplication application = provider.GetRequiredService<RoslynkApplication>();
+
+		OperationResult batch = await application.MultiQueryAsync(new(TestSolutions.Simple, [new GetSymbolBodyQuery(new(TestSolutions.Simple, "System.String", Decompile: true))]));
+
+		await Assert.That(batch.Error!.Code).IsEqualTo("Invalid");
+		await Assert.That(batch.Error.Message).Contains("not available in a batch");
+	}
+
+	[Test]
 	public async Task WhenAnInitialLoadFaults_ThenExplicitReloadCanRecoverWithoutRestartingTheDaemon()
 	{
 		string directory = Path.Combine(Path.GetTempPath(), "rk-reload-" + Guid.NewGuid().ToString("N"));

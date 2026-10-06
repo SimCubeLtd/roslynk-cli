@@ -160,6 +160,15 @@ Razor has two representations: real `.razor`/`.cshtml` additional documents and 
 
 `CodeActionCatalog` discovers C# fix/refactoring providers from Roslyn feature assemblies; providers requiring unavailable imports are skipped. It maps the private unnecessary-imports trigger to public IDE0005. `CodeActionService` discovers actions and encodes path/span/kind/key into an opaque base64 JSON ID. Applying an ID re-discovers the action; do not retain Roslyn action objects across calls or assume discovery remains valid after an edit. Only an `ApplyChangesOperation` produces the changed solution for persistence. Check neighboring behavior when introducing support for a new provider or operation type.
 
+## Decompilation
+
+Sources: `Infrastructure/Decompilation/{MetadataDecompiler,ReferenceAssemblies}.cs` and `Features/Symbols/GetSymbolBody/GetSymbolBodyTool.cs`.
+
+- `body --decompile` is the only entry point. Decompilation must stay an explicit request: plain `body` keeps returning NotSupported for metadata symbols, and `GetSymbolBodyCoreAsync` (the batch entry point) has no decompile parameter. `RoslynkApplication` rejects a batch query that sets it.
+- `MetadataDecompiler` uses ICSharpCode.Decompiler and is owned by `RoslynInstance`, so its bounded cache (four assemblies) is released with the solution. Images are prefetched into memory; no file handle is kept on package or runtime assemblies.
+- The symbol is matched by documentation comment ID, not metadata token, because the assembly read is often not the one the compilation referenced: `ReferenceAssemblies` swaps a reference assembly for its implementation (package `lib`, or the shared runtime for a targeting pack), and a forwarded type is followed to its defining module.
+- The runtime fallback can pick a newer installed runtime than the project targets. The `file` header reports the assembly actually read; do not hide it.
+
 ## Application and CLI contracts
 
 - `ServicesRegistration.AddRoslynk` registers singleton application services. All Roslyn-bearing types are internal; the public API is `RoslynkApplication` plus owned request/result models under `Application`. Do not expose Roslyn types or add CLI/MessagePack/socket/console concerns to Core.

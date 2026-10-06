@@ -105,7 +105,7 @@ public sealed record GetMembersRequest([property: Key(0)] string SolutionPath, [
 public sealed record GetSymbolRequest([property: Key(0)] string SolutionPath, [property: Key(1)] string SymbolName) : IQueryRequest;
 
 [MessagePackObject]
-public sealed record GetSymbolBodyRequest([property: Key(0)] string SolutionPath, [property: Key(1)] string SymbolName, [property: Key(2)] bool IncludeLeadingTrivia = false) : IQueryRequest;
+public sealed record GetSymbolBodyRequest([property: Key(0)] string SolutionPath, [property: Key(1)] string SymbolName, [property: Key(2)] bool IncludeLeadingTrivia = false, [property: Key(3)] bool Decompile = false) : IQueryRequest;
 
 [MessagePackObject]
 public sealed record GetTypeHierarchyRequest([property: Key(0)] string SolutionPath, [property: Key(1)] string TypeName) : IQueryRequest;

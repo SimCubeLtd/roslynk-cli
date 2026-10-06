@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
+using SimCube.Roslynk.Core.Infrastructure.Decompilation;
 using SimCube.Roslynk.Core.Infrastructure.Observability;
 using SimCube.Roslynk.Core.Infrastructure.Workspaces;
 
@@ -37,6 +38,9 @@ internal sealed class RoslynInstance : IDisposable
 	private Task RebuildInFlight = Task.CompletedTask;
 
 	public SolutionKey Key { get; }
+
+	/// <summary>Decompiles referenced assemblies on explicit request; its cache lives and dies with this instance.</summary>
+	public MetadataDecompiler Decompiler { get; } = new();
 
 	public RoslynInstance(SolutionKey key)
 	{
@@ -478,6 +482,7 @@ internal sealed class RoslynInstance : IDisposable
 		Shutdown.Cancel();
 		Watcher?.Dispose();
 		Volatile.Read(ref WorkspaceField)?.Dispose();
+		Decompiler.Clear();
 		Lock.Dispose();
 		Shutdown.Dispose();
 	}

@@ -55,6 +55,8 @@ roslynk-cli solution reload --solution src/MyApp.slnx
 
 Navigation includes `symbol`, `body`, `members`, `search`, `definition`, `expression`, `refs`, `reads`, `writes`, `callers`, `implementations` and `hierarchy`. Diagnostics and analysis include `diagnostics`/`diag`, `dead-code` and `dead-conditionals`. Editing includes `rename`, `rename-parameter`, `change-signature`, `extract`, `usings`, `actions`, `apply-action`, `fix` and `patch`.
 
+`body` reads source declared in the solution. For a symbol that only exists in a referenced assembly, such as a NuGet package or the BCL, pass `--decompile` to get C# reconstructed from its IL, marked `source=decompiled`. It never happens implicitly and is not available in `batch`.
+
 Positions are 1-based. Existing source paths are resolved from the current directory; otherwise paths are interpreted relative to the solution directory. Use fully-qualified symbol names; include parameter types to select an overload. Local functions use the enclosing member's name, such as `N.T.Method(int).local(string)`. Copy exact candidate names from ambiguous results.
 
 ```sh

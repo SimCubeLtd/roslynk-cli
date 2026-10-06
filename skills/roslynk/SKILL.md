@@ -56,6 +56,8 @@ roslynk-cli definition src/Orders.cs 42 13
 roslynk-cli batch 'refs MyApp.OrderService.Process' 'callers MyApp.OrderService.Process'
 ```
 
+`body` returns NotSupported for a symbol that only exists in a referenced assembly (a NuGet package or the BCL). To read framework or library code, pass `--decompile` explicitly: `roslynk-cli body 'Some.Library.Type.Method(int)' --decompile`. The result is marked `source=decompiled` and is reconstructed from IL, not the original source; run-time generated code is not visible. It is a standalone command and is rejected inside `batch`.
+
 `batch` accepts 14 read-only query kinds, up to 25 operations on one immutable snapshot. Diagnostics, actions, writes and lifecycle commands are excluded. Check each slot for failure/truncation. For a follow-up batch requiring the same publication, pass its returned ID with `--expect-snapshot`; if rejected, gather a fresh batch rather than combining generations. A 200,000-character budget can omit later slots. Single-query result limits can also truncate results; increase supported `--max-results` values deliberately and report incomplete coverage.
 
 ## Interpret diagnostics and output

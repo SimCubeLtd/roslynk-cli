@@ -74,7 +74,7 @@ public sealed record GetSymbolRequest(string SolutionPath, string SymbolName);
 
 public sealed record GetSymbolQuery(GetSymbolRequest Request) : QueryOperation;
 
-public sealed record GetSymbolBodyRequest(string SolutionPath, string SymbolName, bool IncludeLeadingTrivia = false);
+public sealed record GetSymbolBodyRequest(string SolutionPath, string SymbolName, bool IncludeLeadingTrivia = false, bool Decompile = false);
 
 public sealed record GetSymbolBodyQuery(GetSymbolBodyRequest Request) : QueryOperation;
 
