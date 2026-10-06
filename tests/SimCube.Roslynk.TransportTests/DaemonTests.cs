@@ -39,13 +39,16 @@ public sealed class DaemonTests
 		}
 	}
 
+	// Zero is an idle window too small to be a timer period, as a tiny ROSLYNK_IDLE_MINUTES produces.
 	[Test]
-	public async Task WhenIdleEvictionClosesTheLastSolution_ThenTheDaemonStops()
+	[Arguments(200)]
+	[Arguments(0)]
+	public async Task WhenIdleEvictionClosesTheLastSolution_ThenTheDaemonStops(int idleMilliseconds)
 	{
 		string root = Path.Combine(Path.GetTempPath(), "rk-" + Guid.NewGuid().ToString("N"));
 		var endpoint = new LocalEndpoint(root);
 		using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-		TimeSpan idleFor = TimeSpan.FromMilliseconds(200);
+		TimeSpan idleFor = TimeSpan.FromMilliseconds(idleMilliseconds);
 		Task daemon = Task.Run(() => Daemon.RunAsync(endpoint, idleFor, lifetime.Token));
 		try
 		{
@@ -54,7 +57,7 @@ public sealed class DaemonTests
 			await File.WriteAllTextAsync(solution, "<Solution />");
 
 			// Several idle windows pass with nothing loaded: an empty daemon is not stopped.
-			await Task.Delay(idleFor * 5, lifetime.Token);
+			await Task.Delay(TimeSpan.FromSeconds(1), lifetime.Token);
 			await using (IpcClient client = await IpcClient.ConnectAsync(endpoint, false, lifetime.Token))
 			{
 				ResponseEnvelope opened = await client.SendAsync(RequestKind.OpenSolution, new OpenSolutionRequest(solution), lifetime.Token);

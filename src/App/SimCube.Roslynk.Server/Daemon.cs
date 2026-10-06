@@ -14,6 +14,8 @@ namespace SimCube.Roslynk.Server;
 public static class Daemon
 {
 	private static readonly ActivitySource Activities = new("SimCube.Roslynk.Server");
+	private static readonly TimeSpan MinimumSweep = TimeSpan.FromMilliseconds(100);
+	private static readonly TimeSpan MaximumSweep = TimeSpan.FromMinutes(1);
 
 	public static Task RunAsync(LocalEndpoint endpoint, CancellationToken cancellationToken = default) =>
 		RunAsync(endpoint, ConfiguredIdleWindow(), cancellationToken);
@@ -88,7 +90,9 @@ public static class Daemon
 	private static async Task MaintainAsync(RoslynkApplication application, TimeSpan? idleFor, CancellationTokenSource lifetime)
 	{
 		if (idleFor is not TimeSpan window) return;
-		TimeSpan sweep = window < TimeSpan.FromMinutes(1) ? window : TimeSpan.FromMinutes(1);
+		// A tiny positive ROSLYNK_IDLE_MINUTES rounds to a window PeriodicTimer rejects as a period, so the
+		// sweep has a floor. The window itself is left alone: it just means "evict as soon as it is unused".
+		TimeSpan sweep = TimeSpan.FromTicks(Math.Clamp(window.Ticks, MinimumSweep.Ticks, MaximumSweep.Ticks));
 		using var timer = new PeriodicTimer(sweep);
 		try
 		{
