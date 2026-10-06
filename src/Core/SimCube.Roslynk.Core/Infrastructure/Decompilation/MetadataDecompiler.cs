@@ -84,8 +84,10 @@ internal sealed class MetadataDecompiler
 
 	private DecompilerTypeSystem TypeSystemFor(string path, IReadOnlyCollection<string> searchDirectories)
 	{
-		// The write time is part of the key so a rebuilt local assembly is not served from a stale image.
-		var key = new CacheKey(path, File.GetLastWriteTimeUtc(path));
+		// The write time is part of the key so a rebuilt local assembly is not served from a stale image. The
+		// directories are part of it because an entry's dependencies are resolved from them once, when it is
+		// loaded: a rebuilt solution that references them elsewhere must not get the earlier ones.
+		var key = new CacheKey(path, File.GetLastWriteTimeUtc(path), string.Join('\n', searchDirectories));
 		Lazy<DecompilerTypeSystem> entry;
 
 		lock (Gate)
@@ -139,5 +141,5 @@ internal sealed class MetadataDecompiler
 
 	private static DecompilerSettings Settings() => new(LanguageVersion.Latest) { ThrowOnAssemblyResolveErrors = false };
 
-	private readonly record struct CacheKey(string Path, DateTime WrittenUtc);
+	private readonly record struct CacheKey(string Path, DateTime WrittenUtc, string SearchDirectories);
 }

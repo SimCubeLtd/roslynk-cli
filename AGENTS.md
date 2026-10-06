@@ -165,7 +165,7 @@ Razor has two representations: real `.razor`/`.cshtml` additional documents and 
 Sources: `Infrastructure/Decompilation/{MetadataDecompiler,ReferenceAssemblies}.cs` and `Features/Symbols/GetSymbolBody/GetSymbolBodyTool.cs`.
 
 - `body --decompile` is the only entry point. Decompilation must stay an explicit request: plain `body` keeps returning NotSupported for metadata symbols, and `GetSymbolBodyCoreAsync` (the batch entry point) has no decompile parameter. `RoslynkApplication` rejects a batch query that sets it.
-- `MetadataDecompiler` uses ICSharpCode.Decompiler and is owned by `RoslynInstance`, so its bounded cache (four assemblies) is released with the solution. Images are prefetched into memory; no file handle is kept on package or runtime assemblies.
+- `MetadataDecompiler` uses ICSharpCode.Decompiler and is owned by `RoslynInstance`, so its bounded cache (four assemblies) is released with the solution. An entry is keyed by assembly path, write time and the search directories its dependencies were resolved from. Images are prefetched into memory; no file handle is kept on package or runtime assemblies.
 - The symbol is matched by documentation comment ID, not metadata token, because the assembly read is often not the one the compilation referenced: `ReferenceAssemblies` swaps a reference assembly for its implementation (package `lib`, or the shared runtime for a targeting pack), and a forwarded type is followed to its defining module, which gets the same swap because the resolver can find it as a `ref` assembly in the solution's reference directories.
 - The runtime fallback can pick a newer installed runtime than the project targets. The `file` header reports the assembly actually read; do not hide it.
 

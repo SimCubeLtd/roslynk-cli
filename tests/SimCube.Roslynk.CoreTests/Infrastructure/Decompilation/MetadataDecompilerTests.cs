@@ -37,6 +37,37 @@ public class MetadataDecompilerTests
 		}
 	}
 
+	[Test]
+	public async Task WhenTheSearchDirectoriesChange_ThenACachedAssemblyIsNotReusedWithTheOldOnes()
+	{
+		// The same facade is decompiled twice by one decompiler. Only the directory its dependency is
+		// resolved from changes, as when a rebuilt solution references a different version of it.
+		string root = Path.Combine(Path.GetTempPath(), "rk-decompile-" + Guid.NewGuid().ToString("N"));
+		try
+		{
+			string first = Path.Combine(root, "first", "Library.dll");
+			string second = Path.Combine(root, "second", "Library.dll");
+			string facade = Path.Combine(root, "facade", "Facade.dll");
+			string runtime = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+
+			Emit(first, "Library", "namespace Forwarded; public class Widget { public int Answer() { return 1; } }");
+			Emit(second, "Library", "namespace Forwarded; public class Widget { public int Answer() { return 2; } }");
+			Emit(facade, "Facade", "[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(Forwarded.Widget))]", first);
+
+			var subject = new MetadataDecompiler();
+			DecompiledSource before = subject.Decompile(facade, "M:Forwarded.Widget.Answer", [Path.GetDirectoryName(first)!, runtime], CancellationToken.None);
+			DecompiledSource after = subject.Decompile(facade, "M:Forwarded.Widget.Answer", [Path.GetDirectoryName(second)!, runtime], CancellationToken.None);
+
+			await Assert.That(before.AssemblyPath).IsEqualTo(first);
+			await Assert.That(after.AssemblyPath).IsEqualTo(second);
+			await Assert.That(after.Text).Contains("return 2;");
+		}
+		finally
+		{
+			Directory.Delete(root, true);
+		}
+	}
+
 	private static void Emit(string path, string assemblyName, string source, params string[] references)
 	{
 		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
